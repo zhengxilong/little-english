@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Little English · Listen & Speak</title>
+<meta name="theme-color" content="#ffffff">
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17212b;background:#fff}*{box-sizing:border-box}body{margin:0;min-height:100svh}button,input{font:inherit}button{cursor:pointer;border:0;touch-action:manipulation}header{height:90px;display:flex;justify-content:space-between;align-items:center;padding:18px clamp(20px,5vw,80px)}.circle{background:#e9ecef;border-radius:50%;width:54px;height:54px;font-size:25px}.progress{width:min(38vw,420px);height:14px;border-radius:20px;background:#eee;overflow:hidden}.progress span{display:block;width:25%;height:100%;background:#00ca75;border-radius:20px}.score{font-weight:800;color:#ed9b20;font-size:24px}.screen{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:4vw;max-width:1350px;margin:auto;min-height:calc(100svh - 125px);padding:12px 5vw 65px}.visual{display:flex;align-items:center;justify-content:center;height:100%;min-height:320px}.visual img{max-height:52vh;max-width:85%;object-fit:contain}.emoji{font-size:clamp(140px,23vw,360px);line-height:1}.lesson{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px}.words{font-size:clamp(34px,4.4vw,64px);font-weight:500;line-height:1.4;min-height:95px}.word{display:inline-block;margin:0 .12em;transition:color .2s}.word.hit{color:#00bf69}.controls{display:flex;align-items:center;justify-content:center;gap:clamp(20px,4vw,65px)}.speak{height:105px;width:105px;background:#00c974;color:white;border-radius:50%;font-size:45px;box-shadow:0 8px 22px #00ca7533}.speak.active{animation:pulse 1.2s infinite}.small{background:none;color:#00be6b;font-size:42px}.small:disabled{opacity:.25}.status{color:#63717b;font-size:18px;min-height:28px}.heard{font-size:16px;color:#64748b;min-height:28px}.settings{position:fixed;top:16px;right:16px;background:white;border:1px solid #eee;border-radius:14px;padding:20px;box-shadow:0 12px 45px #0002;max-width:min(360px,90vw);z-index:6}.settings label{display:block;margin:12px 0}.settings input{width:100%;margin-top:5px;padding:10px;border:1px solid #ccc;border-radius:8px}.settings button,.action{padding:12px 24px;background:#00c974;color:white;border-radius:14px;font-weight:700}.hidden{display:none!important}.overlay{position:fixed;inset:0;background:#17212b66;display:flex;align-items:center;justify-content:center;z-index:10;padding:20px}.modal{background:white;width:min(460px,95vw);padding:45px 28px;border-radius:30px;text-align:center;box-shadow:0 20px 70px #0002}.stars{font-size:clamp(48px,8vw,75px);letter-spacing:4px;color:#ffc531}.modal h2{font-size:40px;margin:15px}.modal p{color:#64748b;word-break:break-word}@keyframes pulse{50%{box-shadow:0 0 0 22px #00c97418}}@media(max-width:700px){header{height:72px;padding:12px 20px}.progress{width:30vw}.circle{width:43px;height:43px}.screen{grid-template-columns:1fr;min-height:calc(100svh - 72px);gap:0;padding:0 20px 28px}.visual{min-height:180px;max-height:38svh}.visual img{max-height:34svh}.emoji{font-size:125px}.lesson{gap:18px}.words{min-height:55px}.speak{width:88px;height:88px}.score{font-size:19px}}
+</style>
+</head>
+<body>
+<header><button class="circle" id="settingsBtn" aria-label="设置">⚙</button><div class="progress"><span id="progress"></span></div><div class="score">⭐ <span id="total">0</span></div></header>
+<main class="screen">
+ <div class="visual" id="visual"><span class="emoji" aria-label="cat">🐱</span></div>
+ <section class="lesson"><div class="words" id="words"></div><div class="controls">
+ <button class="small" id="replay" aria-label="再听范读">🔊</button>
+ <button class="speak" id="start" aria-label="范读并开始跟读">▶</button>
+ <button class="small" id="retry" aria-label="重新跟读">↻</button>
+ </div><div class="status" id="status">点击绿色按钮，先听范读，再跟着读</div><div class="heard" id="heard" aria-live="polite"></div></section>
+</main>
+<div class="settings hidden" id="settings"><strong>练习设置</strong><label>英文句子<input id="sentence" value="This is a cat"></label><label>配图（设备本地选择）<input id="image" type="file" accept="image/*"></label><button id="apply">应用</button></div>
+<div class="overlay hidden" id="overlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle"><div class="stars" id="stars">⭐⭐⭐</div><h2 id="feedbackTitle">Excellent!</h2><p id="feedbackDetails"></p><button class="action" id="again">再来一次</button></div></div>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id);
+const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+const state={target:'This is a cat',imageUrl:null,recognition:null,busy:false,total:0,token:0,finalized:false};
+const normalize=s=>(s||'').toLowerCase().replace(/[^a-z\s']/g,' ').replace(/\s+/g,' ').trim();
+const tokens=s=>normalize(s).split(' ').filter(Boolean);
+function renderWords(recognized=''){
+ const expected=state.target.trim().split(/\s+/);
+ const heard=tokens(recognized);
+ const used=new Set();
+ $('words').replaceChildren(...expected.map(word=>{
+  const span=document.createElement('span');span.className='word';
+  span.textContent=word;
+  const index=heard.findIndex((w,i)=>!used.has(i)&&w===normalize(word));
+  if(index>=0){used.add(index);span.classList.add('hit');}
+  return span;
+ }));
+ return used.size;
+}
+function setStatus(s){$('status').textContent=s;}
+function speak(text,done){
+ if(!('speechSynthesis' in window)){done?.();return;}
+ speechSynthesis.cancel();
+ const u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.rate=.83;
+ let fired=false;
+ const finish=()=>{if(!fired){fired=true;done?.();}};
+ u.onend=finish;u.onerror=finish;speechSynthesis.speak(u);
+}
+function stopRecognition(){const r=state.recognition;state.recognition=null;if(r){r.onresult=r.onerror=r.onend=null;try{r.abort()}catch(e){}}}
+function cancel(){state.token++;state.busy=false;state.finalized=false;stopRecognition();if('speechSynthesis'in window)speechSynthesis.cancel();$('start').classList.remove('active');}
+function feedback(transcript){
+ if(state.finalized)return;state.finalized=true;state.busy=false;$('start').classList.remove('active');
+ const count=renderWords(transcript);const total=tokens(state.target).length;
+ $('heard').textContent=transcript?'听到：'+transcript:'';
+ if(count===0){setStatus('没有识别到目标词，试试再读一次');return;}
+ const perfect=normalize(transcript)===normalize(state.target);
+ // Exact full-sentence match yields 3 stars; any matching word yields 2.
+ const stars=perfect?3:2;state.total+=stars;$('total').textContent=state.total;
+ $('stars').textContent=perfect?'⭐⭐⭐':'⭐⭐☆';
+ $('feedbackTitle').textContent=perfect?'Excellent!':'Good job!';
+ $('feedbackDetails').textContent='匹配 '+count+' / '+total+' 个单词'+(transcript?' · 识别结果：'+transcript:'');
+ $('overlay').classList.remove('hidden');setStatus('跟读完成');speak(perfect?'Excellent!':'Good job!');
+}
+function listen(id){
+ if(id!==state.token)return;
+ if(!Recognition){state.busy=false;setStatus('当前 Safari 不支持网页语音识别，请升级系统或换浏览器验证');return;}
+ const r=new Recognition();state.recognition=r;r.lang='en-US';r.continuous=false;r.interimResults=true;r.maxAlternatives=1;
+ let latest='',ended=false;
+ r.onstart=()=>{setStatus('正在听，请跟读…');$('start').classList.add('active')};
+ r.onresult=e=>{
+  for(let i=e.resultIndex;i<e.results.length;i++)latest=e.results[i][0].transcript;
+  $('heard').textContent='听到：'+latest;renderWords(latest);
+  if(e.results[e.results.length-1].isFinal){ended=true;feedback(latest);}
+ };
+ r.onerror=e=>{if(id!==state.token||state.finalized)return;ended=true;state.busy=false;$('start').classList.remove('active');setStatus('识别未完成：'+e.error+'。请点击绿色按钮重试。')};
+ r.onend=()=>{if(id!==state.token||state.finalized)return;state.recognition=null;state.busy=false;$('start').classList.remove('active');if(!ended&&latest)feedback(latest);else if(!ended)setStatus('没有听到语音，请再试一次');};
+ try{r.start()}catch(e){state.busy=false;setStatus('无法启动语音识别：'+e.message);}
+}
+function begin(withPrompt=true){
+ cancel();$('overlay').classList.add('hidden');$('heard').textContent='';renderWords();
+ const id=state.token;state.busy=true;
+ if(withPrompt){setStatus('请先听范读…');speak(state.target,()=>listen(id));}
+ else listen(id);
+}
+$('start').onclick=()=>state.busy?cancel():begin(true);
+$('replay').onclick=()=>{cancel();setStatus('播放范读…');speak(state.target,()=>setStatus('点击绿色按钮开始跟读'))};
+$('retry').onclick=()=>begin(false);
+$('again').onclick=()=>begin(true);
+$('settingsBtn').onclick=()=>$('settings').classList.toggle('hidden');
+$('apply').onclick=()=>{const s=$('sentence').value.trim();if(!s)return alert('请输入英文句子');cancel();state.target=s;renderWords();$('settings').classList.add('hidden');setStatus('点击绿色按钮，先听范读，再跟着读');};
+$('image').onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(state.imageUrl)URL.revokeObjectURL(state.imageUrl);state.imageUrl=URL.createObjectURL(file);const img=document.createElement('img');img.src=state.imageUrl;img.alt='练习配图';$('visual').replaceChildren(img);};
+renderWords();
+})();
+</script>
+</body></html>
