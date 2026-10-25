@@ -1,0 +1,14 @@
+{
+  "lessons": [
+    {
+      "id": 1,
+      "text": "This is a cat",
+      "image": "assets/images/cat.png"
+    },
+    {
+      "id": 2,
+      "text": "This is a dog",
+      "image": "assets/images/dog.png"
+    }
+  ]
+}
